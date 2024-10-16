@@ -1,0 +1,6 @@
+Model Evaluation on Test Set:
+Mean IoU: 0.9821
+Mean Pixel Accuracy: 0.9984
+
+Analysis:
+The model demonstrates high mean IoU and mean pixel accuracy on the test set, indicating effective segmentation performance. Further improvements could be achieved by adjusting hyperparameters or using data augmentation techniques.

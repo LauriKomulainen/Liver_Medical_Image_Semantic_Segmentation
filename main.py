@@ -5,7 +5,6 @@ from model import UNet, train_model, compute_metrics, segment_single_image, batc
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-
 if __name__ == "__main__":
     # DataLoaderit
     train_loader, val_loader, test_loader = get_dataloaders(batch_size=batch_size)
@@ -30,17 +29,64 @@ if __name__ == "__main__":
     mIoU, mPA = compute_metrics(model, test_loader)
     print(f"Model Evaluation on Test Set:\nMean IoU: {mIoU:.4f}\nMean Pixel Accuracy: {mPA:.4f}")
 
+
+    def arvioi_miou(mIoU):
+        if mIoU > 0.85:
+            return (
+                f"Mean Intersection over Union (mIoU) on erinomainen ({mIoU:.4f}), mikä osoittaa, että malli suoriutuu erittäin hyvin "
+                "maksakuvien segmentoinnista ja pystyy erottamaan maksakudoksen tarkasti taustasta ja muista kudoksista."
+            )
+        elif 0.75 <= mIoU <= 0.85:
+            return (
+                f"Mean Intersection over Union (mIoU) on hyvä ({mIoU:.4f}), mikä osoittaa, että malli suoriutuu segmentoinnista "
+                "luotettavasti. Vaikka tarkkuus on korkea, pieniä parannuksia voi olla tarpeen joillakin alueilla."
+            )
+        elif 0.5 <= mIoU < 0.75:
+            return (
+                f"Mean Intersection over Union (mIoU) on hyväksyttävä ({mIoU:.4f}), mikä viittaa siihen, että malli suoriutuu segmentoinnista "
+                "tyydyttävästi, mutta tarkkuuden parantaminen on suositeltavaa tehokkaan kliinisen sovelluksen varmistamiseksi."
+            )
+        else:
+            return (
+                f"Mean Intersection over Union (mIoU) on matala ({mIoU:.4f}), mikä osoittaa, että mallin segmentointitarkkuus on riittämätön "
+                "ja vaatii huomattavia parannuksia."
+            )
+
+
+    def arvioi_mpa(mPA):
+        if mPA > 0.9:
+            return (
+                f"Mean Pixel Accuracy (mPA) on erittäin korkea ({mPA:.4f}), mikä tarkoittaa, että malli osaa luokitella pikselit erittäin tarkasti "
+                "maksakuvissa, mikä tekee siitä hyvin soveltuvan kliinisiin sovelluksiin."
+            )
+        elif 0.85 <= mPA <= 0.9:
+            return (
+                f"Mean Pixel Accuracy (mPA) on korkea ({mPA:.4f}), mikä osoittaa, että malli pystyy luotettavasti luokittelemaan suurimman osan pikseleistä "
+                "oikein. Pieniä parannuksia voi harkita joidenkin alueiden tarkkuuden nostamiseksi."
+            )
+        elif 0.7 <= mPA < 0.85:
+            return (
+                f"Mean Pixel Accuracy (mPA) on hyväksyttävä ({mPA:.4f}), mikä tarkoittaa, että malli suoriutuu segmentoinnista pikselitasolla tyydyttävästi, "
+                "mutta tarkkuutta olisi hyvä parantaa laadun varmistamiseksi."
+            )
+        else:
+            return (
+                f"Mean Pixel Accuracy (mPA) on matala ({mPA:.4f}), mikä viittaa siihen, että malli ei onnistu luotettavasti pikselien oikeassa luokittelussa, "
+                "ja sen käyttö kliinisissä sovelluksissa on rajoitettua."
+            )
+
     # Tallenna arviointiraportti
-    with open('evaluation_report.txt', 'w') as f:
-        f.write(f"Model Evaluation on Test Set:\nMean IoU: {mIoU:.4f}\nMean Pixel Accuracy: {mPA:.4f}\n")
-        f.write("\nAnalysis:\n")
-        f.write("The model demonstrates high mean IoU and mean pixel accuracy on the test set, indicating effective segmentation performance. Further improvements could be achieved by adjusting hyperparameters or using data augmentation techniques.\n")
-        f.write(f"Kierrokset: {num_epochs}, Learning_rate: {learning_rate}, batch_size: {batch_size}\n")
-        f.write("\nGenerated Plots and Images:\n")
-        f.write("Loss Progression Plot: loss_progression.png\n")
-        f.write("Sample Input Images: sample_images/\n")
-        f.write("Sample Predicted Masks: sample_preds/\n")
-        f.write("Sample Ground Truth Masks: sample_masks/\n")
+    with open('arviointiraportti.txt', 'w') as f:
+        f.write(f"Mallin arviointi testijoukolla:\nKeskimääräinen IoU: {mIoU:.4f}\nKeskimääräinen pikselitarkkuus (mPA): {mPA:.4f}\n")
+        f.write("\nAnalyysi:\n")
+        f.write(arvioi_miou(mIoU) + "\n")
+        f.write(arvioi_mpa(mPA) + "\n")
+        f.write(f"Koulutuskierrokset: {num_epochs}, Oppimisnopeus: {learning_rate}, Eräkoko: {batch_size}\n")
+        f.write("\nLuodut kuvaajat ja kuvat:\n")
+        f.write("Häviön kehityskaavio: loss_progression.png\n")
+        f.write("Esimerkkisyötekuvat: sample_images/\n")
+        f.write("Esimerkit ennustetuista segmenteista: sample_preds/\n")
+        f.write("Esimerkit todellisista segmenteista: sample_masks/\n")
 
     # Yhden kuvan segmentointi (kolme esimerkkiä testijoukosta)
     test_images_dir = 'Liver_Medical_Image_Datasets/test/images'

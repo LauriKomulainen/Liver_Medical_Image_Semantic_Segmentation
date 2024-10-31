@@ -1,34 +1,64 @@
 import os
 import torch
+from PIL import Image
+
 from data_handler import get_dataloaders, transform
-from model import UNet, train_model, compute_metrics, segment_single_image, batch_size, num_epochs, learning_rate
+from model import UNet, train_model, compute_metrics, segment_single_image
 import matplotlib.pyplot as plt
 from datetime import datetime
 
+# Hyperparametrit
+batch_size = 4
+num_epochs = 1
+learning_rate = 1e-4
+
 if __name__ == "__main__":
-    # DataLoaderit
-    train_loader, val_loader, test_loader = get_dataloaders(batch_size=batch_size)
+    result_dir = "model reports"
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_dir = os.path.join(result_dir, timestamp)
+    os.makedirs(output_dir, exist_ok=True)
 
-    # Mallin koulutus
-    model = UNet()
-    train_losses, val_losses = train_model(model, train_loader, val_loader, num_epochs, learning_rate)
+    try:
+        train_loader, val_loader, test_loader = get_dataloaders(batch_size=batch_size)
+        print("DataLoaderit ladattu")
 
-    # Piirrä häviöt
-    plt.figure()
-    plt.plot(train_losses, label='Train Loss')
-    plt.plot(val_losses, label='Validation Loss')
-    plt.title('Loss Progression')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.savefig('loss_progression.png')
-    plt.show()
+        # Mallin lataus tai koulutus
+        model = UNet()
+        model_path = 'unet_model.pth'
+        if os.path.exists(model_path):
+            print("Malli löytyy tiedostosta, ladataan se...")
+            model.load_state_dict(torch.load(model_path))
+            train_losses, val_losses = None, None
+        else:
+            print("Malli ei löytynyt tiedostosta, aloitetaan koulutus...")
+            train_losses, val_losses = train_model(model, train_loader, val_loader)
+            torch.save(model.state_dict(), model_path)
+            print("Koulutus suoritettu ja malli tallennettu")
 
-    # Mallin arviointi testijoukolla
-    model.load_state_dict(torch.load('unet_model.pth'))
+    except Exception as e:
+        print(f"Virhe suorituksen aikana: {e}")
+
+    loss_plot_path = None
+
+    existing_loss_plot_path = os.path.abspath('loss_progression.png')
+    if os.path.exists(existing_loss_plot_path):
+        loss_plot_path = existing_loss_plot_path
+    else:
+        if train_losses is not None and val_losses is not None:
+            plt.figure()
+            plt.plot(train_losses, label='Train Loss')
+            plt.plot(val_losses, label='Validation Loss')
+            plt.title('Loss Progression')
+            plt.xlabel('Epoch')
+            plt.ylabel('Loss')
+            plt.legend()
+            loss_plot_path = os.path.join(output_dir, 'loss_progression.png')
+            plt.savefig(loss_plot_path)
+            plt.show()
+        else:
+            loss_plot_path = "Ei koulutustietoa saatavilla"
+
     mIoU, mPA = compute_metrics(model, test_loader)
-    print(f"Model Evaluation on Test Set:\nMean IoU: {mIoU:.4f}\nMean Pixel Accuracy: {mPA:.4f}")
-
 
     def arvioi_miou(mIoU):
         if mIoU > 0.85:
@@ -52,7 +82,6 @@ if __name__ == "__main__":
                 "ja vaatii huomattavia parannuksia."
             )
 
-
     def arvioi_mpa(mPA):
         if mPA > 0.9:
             return (
@@ -75,51 +104,56 @@ if __name__ == "__main__":
                 "ja sen käyttö kliinisissä sovelluksissa on rajoitettua."
             )
 
-    # Tallenna arviointiraportti
-    with open('arviointiraportti.txt', 'w') as f:
-        f.write(f"Mallin arviointi testijoukolla:\nKeskimääräinen IoU: {mIoU:.4f}\nKeskimääräinen pikselitarkkuus (mPA): {mPA:.4f}\n")
-        f.write("\nAnalyysi:\n")
-        f.write(arvioi_miou(mIoU) + "\n")
-        f.write(arvioi_mpa(mPA) + "\n")
-        f.write(f"Koulutuskierrokset: {num_epochs}, Oppimisnopeus: {learning_rate}, Eräkoko: {batch_size}\n")
-        f.write("\nLuodut kuvaajat ja kuvat:\n")
-        f.write("Häviön kehityskaavio: loss_progression.png\n")
-        f.write("Esimerkkisyötekuvat: sample_images/\n")
-        f.write("Esimerkit ennustetuista segmenteista: sample_preds/\n")
-        f.write("Esimerkit todellisista segmenteista: sample_masks/\n")
+    report_path = os.path.join(output_dir, 'arviointiraportti.html')
+    with open(report_path, 'w') as f:
+        # Kirjoita HTML:n alkuosa
+        f.write("<html><head><title>Arviointiraportti</title></head><body>")
+        f.write("<h1>Mallin arviointi testijoukolla</h1>")
+        f.write(f"<p>Keskimääräinen IoU: {mIoU:.4f}</p>")
+        f.write(f"<p>Keskimääräinen pikselitarkkuus (mPA): {mPA:.4f}</p>")
+        f.write("<h2>Analyysi:</h2>")
+        f.write(f"<p>{arvioi_miou(mIoU)}</p>")
+        f.write(f"<p>{arvioi_mpa(mPA)}</p>")
+        f.write(f"<p>Koulutuskierrokset: {num_epochs}, Oppimisnopeus: {learning_rate}, Eräkoko: {batch_size}</p>")
+        f.write("<h2>Luodut kuvaajat ja kuvat:</h2>")
 
-    # Yhden kuvan segmentointi (kolme esimerkkiä testijoukosta)
-    test_images_dir = 'Liver_Medical_Image_Datasets/test/images'
-    test_image_files = sorted(os.listdir(test_images_dir))
+        if os.path.exists(loss_plot_path):
+            f.write("<h3>Häviön kehityskaavio:</h3>")
+            f.write(f"<img src='{loss_plot_path}' width='800'><br>")
+        else:
+            f.write("<p>Häviön kehityskaavio: Ei koulutustietoa saatavilla</p>")
 
-    # Valitse kolme testikuvaa
-    test_images = test_image_files[:3]
-    for img_name in test_images:
-        image_path = os.path.join(test_images_dir, img_name)
-        save_path = f"segmented_{img_name}"
-        image, label, output_np = segment_single_image(model, image_path, transform)
+        test_images_dir = 'Liver_Medical_Image_Datasets/test/images'
+        test_image_files = sorted(os.listdir(test_images_dir))
 
-        # Luo tuloshakemisto
-        result_dir = "result"
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        output_dir = os.path.join(result_dir, timestamp)
-        os.makedirs(output_dir, exist_ok=True)
+        test_images = test_image_files[:3]
+        for img_name in test_images:
+            image_path = os.path.join(test_images_dir, img_name)
+            image, label, output_np = segment_single_image(model, image_path, transform)
 
-        # Piirrä ja tallenna kuvat
-        fig, axs = plt.subplots(1, 3, figsize=(12, 4))
-        axs[0].imshow(image)
-        axs[0].set_title('Alkuperäinen kuva')
-        axs[1].imshow(label, cmap='gray')
-        axs[1].set_title('Todellinen segmentoitu kuva')
-        axs[2].imshow(output_np, cmap='gray')
-        axs[2].set_title('Ennustettu segmentointi')
+            fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+            axs[0].imshow(image)
+            axs[0].set_title('Alkuperäinen kuva')
+            axs[1].imshow(label, cmap='gray')
+            axs[1].set_title('Todellinen segmentoitu kuva')
+            axs[2].imshow(output_np, cmap='gray')
+            axs[2].set_title('Ennustettu segmentointi')
 
-        for ax in axs:
-            ax.axis('off')
-        plt.tight_layout()
+            for ax in axs:
+                ax.axis('off')
+            plt.tight_layout()
 
-        # Tallenna kuva alikansioon
-        base_name = os.path.splitext(os.path.basename(image_path))[0]
-        output_path = os.path.join(output_dir, f'segmentation_result_{base_name}.png')
-        plt.savefig(output_path)
-        plt.show()
+            base_name = os.path.splitext(os.path.basename(image_path))[0]
+            output_image_path = os.path.abspath(os.path.join(output_dir, f'segmentation_result_{base_name}.png'))
+            plt.savefig(output_image_path)
+            plt.close(fig)
+
+            thumbnail_path = os.path.abspath(os.path.join(output_dir, f'segmentation_result_{base_name}_thumbnail.png'))
+            image_obj = Image.open(output_image_path)
+            image_obj.thumbnail((800, 800))
+            image_obj.save(thumbnail_path)
+
+            f.write(f"<h3>Segmentointikuva: {base_name}</h3>")
+            f.write(f"<a href='{output_image_path}' target='_blank'><img src='{thumbnail_path}' width='800'></a><br>")
+
+        f.write("</body></html>")

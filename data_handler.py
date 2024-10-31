@@ -1,10 +1,9 @@
 import os
 import random
+import shutil
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
-
-
 
 
 # 2. Datasetin lataus ja esikäsittely
@@ -14,6 +13,19 @@ def split_dataset(base_dir):
     images_dir = os.path.join(base_dir, 'Images')
     labels_dir = os.path.join(base_dir, 'Labels')
 
+    # Tarkista, onko dataset jo jaettu
+    already_split = all(
+        os.path.exists(os.path.join(base_dir, split, 'images'))
+        and os.path.exists(os.path.join(base_dir, split, 'labels'))
+        and len(os.listdir(os.path.join(base_dir, split, 'images'))) > 0
+        for split in ['train', 'val', 'test']
+    )
+
+    if already_split:
+        print("Dataset on jo jaettu.")
+        return
+
+    # Jos datasettiä ei ole jaettu, jatka jakamista
     image_files = sorted(os.listdir(images_dir))
     random.seed(42)
     random.shuffle(image_files)
@@ -48,11 +60,14 @@ def split_dataset(base_dir):
             if not os.path.exists(dst_label):
                 shutil.copy(src_label, dst_label)
 
+    print("Dataset on jaettu onnistuneesti.")
+
+
 # Suorita datasetin jakaminen
-import shutil
 if __name__ == "__main__":
     base_dir = 'Liver_Medical_Image_Datasets'
     split_dataset(base_dir)
+
 
 # 2.2 Datasetin määrittely
 class LiverDataset(Dataset):
@@ -84,11 +99,13 @@ class LiverDataset(Dataset):
 
         return image, label
 
+
 # 2.3 Data transformaatiot
 transform = transforms.Compose([
     transforms.Resize((256, 256)),
     transforms.ToTensor()
 ])
+
 
 # 2.4 DataLoaderit
 def get_dataloaders(batch_size=4):

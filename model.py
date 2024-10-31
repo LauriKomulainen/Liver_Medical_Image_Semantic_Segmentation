@@ -1,13 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import matplotlib.pyplot as plt
 from PIL import Image
+import matplotlib.pyplot as plt
 import os
-from datetime import datetime
-
 from data_handler import transform
-
 
 class UNet(nn.Module):
     def __init__(self):
@@ -94,14 +91,7 @@ class UNet(nn.Module):
         c10 = self.conv10(c9)
         return c10
 
-# 4. Mallin koulutus
-
-# Hyperparametrit
-num_epochs = 1
-learning_rate = 1e-4
-batch_size = 4
-
-def train_model(model, train_loader, val_loader):
+def train_model(model, train_loader, val_loader, num_epochs, learning_rate):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
 
@@ -133,7 +123,6 @@ def train_model(model, train_loader, val_loader):
         # Validointi
         model.eval()
         val_loss = 0.0
-
         with torch.no_grad():
             for images, masks in val_loader:
                 images = images.to(device)
@@ -146,13 +135,9 @@ def train_model(model, train_loader, val_loader):
         avg_val_loss = val_loss / len(val_loader)
         val_losses.append(avg_val_loss)
 
-        print(f"Epoch [{epoch+1}/{num_epochs}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+    return train_losses, val_losses
 
-    # Tallenna malli
-    torch.save(model.state_dict(), 'unet_model.pth')
-
-
-def segment_single_image(model, image_path, save_path):
+def segment_single_image(model, image_path, transform):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
     model.eval()
@@ -167,39 +152,20 @@ def segment_single_image(model, image_path, save_path):
 
     output_np = output.cpu().squeeze().numpy()
 
-    # Tallenna segmentoitu kuva
-    plt.imsave(save_path, output_np, cmap='gray')
-
-    result_dir = "result"
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    output_dir = os.path.join(result_dir, timestamp)
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Näytä alkuperäinen kuva, ground truth ja segmentointi
+    # Ladataan ground truth
     base_name = os.path.splitext(os.path.basename(image_path))[0]
     label_name = f"{base_name}_mask.png"
-    label_path = os.path.join(os.path.dirname(image_path).replace('Images', 'Labels'), label_name)
+    label_path = os.path.join(os.path.dirname(image_path).replace('images', 'labels'), label_name)
+
+    print("Image Path:", image_path)
+    print("Base Name:", base_name)
+    print("Label Path:", label_path)
     label = Image.open(label_path).convert('L')
     label = transform(label).squeeze().numpy()
 
-    # Luo ja tallenna kuva
-    fig, axs = plt.subplots(1, 3, figsize=(12, 4))
-    axs[0].imshow(image)
-    axs[0].set_title('Alkuperäinen kuva')
-    axs[1].imshow(label, cmap='gray')
-    axs[1].set_title('Todellinen segmentoitu kuva')
-    axs[2].imshow(output_np, cmap='gray')
-    axs[2].set_title('Ennustettu segmentointi')
 
-    for ax in axs:
-        ax.axis('off')
-    plt.tight_layout()
 
-    # Tallenna kuva alikansioon
-    output_path = os.path.join(output_dir, f'segmentation_result_{base_name}.png')
-    plt.savefig(output_path)
-    plt.show()
-
+    return image, label, output_np
 
 def compute_metrics(model, data_loader):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -230,17 +196,4 @@ def compute_metrics(model, data_loader):
 
     mIoU = total_iou / n_samples
     mPA = total_acc / n_samples
-
-    print(f"Model Evaluation on Test Set:\nMean IoU: {mIoU:.4f}\nMean Pixel Accuracy: {mPA:.4f}")
-
-    # Tallenna metriikat raportointia varten
-    with open('evaluation_report.txt', 'w') as f:
-        f.write(f"Model Evaluation on Test Set:\nMean IoU: {mIoU:.4f}\nMean Pixel Accuracy: {mPA:.4f}\n")
-        f.write("\nAnalysis:\n")
-        f.write("The model demonstrates high mean IoU and mean pixel accuracy on the test set, indicating effective segmentation performance. Further improvements could be achieved by adjusting hyperparameters or using data augmentation techniques.\n")
-        f.write(f"Kierrokset: {num_epochs}, Learning_rate: {learning_rate}, batch_size: {batch_size}\n")
-        f.write("\nGenerated Plots and Images:\n")
-        f.write("Loss Progression Plot: loss_progression.png\n")
-        f.write("Sample Input Images: sample_images/\n")
-        f.write("Sample Predicted Masks: sample_preds/\n")
-        f.write("Sample Ground Truth Masks: sample_masks/\n")
+    return mIoU, mPA

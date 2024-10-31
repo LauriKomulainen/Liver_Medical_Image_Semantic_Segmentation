@@ -158,7 +158,7 @@ cython_debug/
 .idea/
 
 # models
-.pth
+unet_model.pth
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from PIL import Image
-import matplotlib.pyplot as plt
 import os
-from data_handler import transform
+from config import learning_rate, num_epochs, batch_size
+
 
 class UNet(nn.Module):
     def __init__(self):
@@ -91,6 +91,7 @@ class UNet(nn.Module):
         c10 = self.conv10(c9)
         return c10
 
+
 def train_model(model, train_loader, val_loader, num_epochs, learning_rate):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
@@ -101,11 +102,16 @@ def train_model(model, train_loader, val_loader, num_epochs, learning_rate):
     train_losses = []
     val_losses = []
 
+    print("Koulutus alkaa...")
     for epoch in range(num_epochs):
         model.train()
         train_loss = 0.0
+        print(f"Epoch {epoch + 1}/{num_epochs}")
 
-        for images, masks in train_loader:
+        for batch_idx, (images, masks) in enumerate(train_loader):
+            print(f"  Erä {batch_idx + 1}/{len(train_loader)} käsittelyssä...")
+            print(f"  Kuvan muoto: {images.shape}, Maskin muoto: {masks.shape}")
+
             images = images.to(device)
             masks = masks.to(device)
 
@@ -123,6 +129,7 @@ def train_model(model, train_loader, val_loader, num_epochs, learning_rate):
         # Validointi
         model.eval()
         val_loss = 0.0
+
         with torch.no_grad():
             for images, masks in val_loader:
                 images = images.to(device)
@@ -135,7 +142,14 @@ def train_model(model, train_loader, val_loader, num_epochs, learning_rate):
         avg_val_loss = val_loss / len(val_loader)
         val_losses.append(avg_val_loss)
 
+        print(f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+
+    # Tallenna malli
+    torch.save(model.state_dict(), 'unet_model.pth')
+    print("Koulutus valmis ja malli tallennettu.")
+
     return train_losses, val_losses
+
 
 def segment_single_image(model, image_path, transform):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

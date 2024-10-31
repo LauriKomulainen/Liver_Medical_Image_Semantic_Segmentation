@@ -3,14 +3,11 @@ import torch
 from PIL import Image
 
 from data_handler import get_dataloaders, transform
+from config import learning_rate, num_epochs, batch_size
 from model import UNet, train_model, compute_metrics, segment_single_image
+
 import matplotlib.pyplot as plt
 from datetime import datetime
-
-# Hyperparametrit
-batch_size = 4
-num_epochs = 1
-learning_rate = 1e-4
 
 if __name__ == "__main__":
     result_dir = "model reports"
@@ -18,20 +15,30 @@ if __name__ == "__main__":
     output_dir = os.path.join(result_dir, timestamp)
     os.makedirs(output_dir, exist_ok=True)
 
+    loss_plot_file = os.path.abspath('loss_progression.png')
+    model_path = 'unet_model.pth'
+
     try:
         train_loader, val_loader, test_loader = get_dataloaders(batch_size=batch_size)
         print("DataLoaderit ladattu")
 
         # Mallin lataus tai koulutus
         model = UNet()
-        model_path = 'unet_model.pth'
+
+        # Check if the model file exists
         if os.path.exists(model_path):
             print("Malli löytyy tiedostosta, ladataan se...")
             model.load_state_dict(torch.load(model_path))
             train_losses, val_losses = None, None
         else:
             print("Malli ei löytynyt tiedostosta, aloitetaan koulutus...")
-            train_losses, val_losses = train_model(model, train_loader, val_loader)
+
+            # Delete existing loss plot file if retraining
+            if os.path.exists(loss_plot_file):
+                os.remove(loss_plot_file)
+
+            train_losses, val_losses = train_model(model, train_loader, val_loader, num_epochs=num_epochs,
+                                                   learning_rate=learning_rate)
             torch.save(model.state_dict(), model_path)
             print("Koulutus suoritettu ja malli tallennettu")
 
@@ -40,9 +47,8 @@ if __name__ == "__main__":
 
     loss_plot_path = None
 
-    existing_loss_plot_path = os.path.abspath('loss_progression.png')
-    if os.path.exists(existing_loss_plot_path):
-        loss_plot_path = existing_loss_plot_path
+    if os.path.exists(loss_plot_file):
+        loss_plot_path = os.path.abspath(loss_plot_file)
     else:
         if train_losses is not None and val_losses is not None:
             plt.figure()
@@ -52,7 +58,7 @@ if __name__ == "__main__":
             plt.xlabel('Epoch')
             plt.ylabel('Loss')
             plt.legend()
-            loss_plot_path = os.path.join(output_dir, 'loss_progression.png')
+            loss_plot_path = os.path.join(output_dir, loss_plot_file)
             plt.savefig(loss_plot_path)
             plt.show()
         else:

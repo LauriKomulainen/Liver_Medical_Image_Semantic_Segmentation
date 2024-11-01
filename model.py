@@ -1,31 +1,36 @@
+import os
+import random
 import torch
+from PIL import Image
 import torch.nn as nn
 import torch.optim as optim
-from PIL import Image
-import os
-from config import learning_rate, num_epochs, batch_size
 
 
 class UNet(nn.Module):
-    def __init__(self):
+    def __init__(self, dropout_rate=0.2):
         super(UNet, self).__init__()
 
-        # Määritellään U-Netin peruspalikat
+        # Define a dropout layer
+        self.dropout = nn.Dropout(dropout_rate)
+
+        # Define basic U-Net blocks with dropout
         def conv_block(in_channels, out_channels):
             block = nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
                 nn.BatchNorm2d(out_channels),
                 nn.ReLU(inplace=True),
+                self.dropout,
                 nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
                 nn.BatchNorm2d(out_channels),
                 nn.ReLU(inplace=True)
             )
             return block
 
+        # Define up-sampling convolution
         def up_conv(in_channels, out_channels):
             return nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
 
-        # U-Netin kerrokset
+        # Define U-Net layers
         self.conv1 = conv_block(3, 64)
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
 
@@ -92,63 +97,118 @@ class UNet(nn.Module):
         return c10
 
 
-def train_model(model, train_loader, val_loader, num_epochs, learning_rate):
+def train_model(model, train_loader, val_loader, optimizer_type, learning_rate, num_epochs, dropout_rate,
+                early_stopping_patience=5):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
 
+    # Tappiofunktio ja optimisaattori
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    if optimizer_type == 'Adam':
+        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    elif optimizer_type == 'SGD':
+        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+    else:
+        raise ValueError(f"Unsupported optimizer type: {optimizer_type}")
 
     train_losses = []
     val_losses = []
+    best_val_loss = float('inf')
+    patience_counter = 0
 
     print("Koulutus alkaa...")
     for epoch in range(num_epochs):
         model.train()
         train_loss = 0.0
-        print(f"Epoch {epoch + 1}/{num_epochs}")
+        print(f"\nEpoch {epoch + 1}/{num_epochs}")
 
         for batch_idx, (images, masks) in enumerate(train_loader):
-            print(f"  Erä {batch_idx + 1}/{len(train_loader)} käsittelyssä...")
-            print(f"  Kuvan muoto: {images.shape}, Maskin muoto: {masks.shape}")
-
-            images = images.to(device)
-            masks = masks.to(device)
-
+            images, masks = images.to(device), masks.to(device)
             optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, masks)
             loss.backward()
             optimizer.step()
-
             train_loss += loss.item()
+
+            # Logitus jokaisen erän jälkeen
+            if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == len(train_loader):
+                print(f"  Erä {batch_idx + 1}/{len(train_loader)}, Loss: {loss.item():.4f}")
 
         avg_train_loss = train_loss / len(train_loader)
         train_losses.append(avg_train_loss)
+        print(f"Epoch [{epoch + 1}/{num_epochs}], Keskimääräinen Train Loss: {avg_train_loss:.4f}")
 
         # Validointi
         model.eval()
         val_loss = 0.0
 
         with torch.no_grad():
-            for images, masks in val_loader:
-                images = images.to(device)
-                masks = masks.to(device)
-
+            for batch_idx, (images, masks) in enumerate(val_loader):
+                images, masks = images.to(device), masks.to(device)
                 outputs = model(images)
                 loss = criterion(outputs, masks)
                 val_loss += loss.item()
 
         avg_val_loss = val_loss / len(val_loader)
         val_losses.append(avg_val_loss)
+        print(f"Epoch [{epoch + 1}/{num_epochs}], Val Loss: {avg_val_loss:.4f}")
 
-        print(f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+        # Early stopping ja mallin tallennus
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            patience_counter = 0
+            torch.save(model.state_dict(), 'unet_model.pth')
+            print("  Parannus validointitappiossa, malli tallennettu tiedostoon 'unet_model.pth'.")
+        else:
+            patience_counter += 1
+            print(f"  Early stopping counter: {patience_counter}/{early_stopping_patience}")
+            if patience_counter >= early_stopping_patience:
+                print("Early stopping triggered.")
+                break
 
-    # Tallenna malli
-    torch.save(model.state_dict(), 'unet_model.pth')
-    print("Koulutus valmis ja malli tallennettu.")
-
+    print("Koulutus valmis.")
     return train_losses, val_losses
+
+
+def random_search(train_loader, val_loader, param_space, num_trials):
+    best_score = float('inf')
+    best_params = None
+
+    for i in range(num_trials):
+        # Arvotaan hyperparametrit satunnaisesti
+        batch_size = random.choice(param_space['batch_size'])
+        learning_rate = random.choice(param_space['learning_rate'])
+        dropout_rate = random.choice(param_space['dropout_rate'])
+        optimizer_type = random.choice(param_space['optimizer_type'])
+        num_epochs = random.choice(param_space['num_epochs'])
+
+        # Luo mallin uudelleen jokaisessa kokeilussa
+        model = UNet(dropout_rate=dropout_rate)
+
+        print(f"\nRandom Search Trial {i + 1}/{num_trials}")
+        print(
+            f"Hyperparametrit: Batch size={batch_size}, Learning rate={learning_rate}, Dropout rate={dropout_rate}, Optimizer={optimizer_type}, Epochs={num_epochs}")
+
+        # Koulutetaan malli nykyisillä parametreilla
+        train_losses, val_losses = train_model(model, train_loader, val_loader, optimizer_type, learning_rate, num_epochs, dropout_rate)
+
+        # Vertaa viimeisintä validaatiohäviötä parhaaseen pisteeseen
+        if val_losses[-1] < best_score:
+            best_score = val_losses[-1]
+            best_params = {
+                'batch_size': batch_size,
+                'learning_rate': learning_rate,
+                'dropout_rate': dropout_rate,
+                'optimizer_type': optimizer_type,
+                'num_epochs': num_epochs
+            }
+        print(f"Validaatio Lossi: {val_losses[-1]:.4f}")
+
+    print("\nParhaat hyperparametrit:")
+    print("Best Score:", best_score)
+    print("Best Params:", best_params)
+    return best_params
 
 
 def segment_single_image(model, image_path, transform):
@@ -176,8 +236,6 @@ def segment_single_image(model, image_path, transform):
     print("Label Path:", label_path)
     label = Image.open(label_path).convert('L')
     label = transform(label).squeeze().numpy()
-
-
 
     return image, label, output_np
 

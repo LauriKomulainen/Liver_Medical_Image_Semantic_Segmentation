@@ -1,56 +1,72 @@
 import os
+import random
+
 import torch
 from PIL import Image
 
 from data_handler import get_dataloaders, transform
-from config import learning_rate, num_epochs, batch_size
-from model import UNet, train_model, compute_metrics, segment_single_image
+from model import UNet, train_model, compute_metrics, segment_single_image, random_search
 
 import matplotlib.pyplot as plt
 from datetime import datetime
 
 if __name__ == "__main__":
     result_dir = "model reports"
+    batch_size = 4
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    output_dir = os.path.join(result_dir, timestamp)
-    os.makedirs(output_dir, exist_ok=True)
+    base_output_dir = os.path.join(result_dir, timestamp)
+    os.makedirs(base_output_dir, exist_ok=True)
 
-    loss_plot_file = os.path.abspath('loss_progression.png')
-    model_path = 'unet_model.pth'
+    # Määritä hyperparametrihakuväli Random Searchia varten
+    param_space = {
+        'batch_size': [4], #, 8, 16
+        'learning_rate': [1e-3], #, 1e-4, 1e-5
+        'dropout_rate': [0.1, 0.2, 0.3],
+        'optimizer_type': ['Adam'], #, 'SGD'
+        'num_epochs': [1]  # 10, 20, 30
+    }
 
-    try:
-        train_loader, val_loader, test_loader = get_dataloaders(batch_size=batch_size)
-        print("DataLoaderit ladattu")
+    # Ladataan data
+    train_loader, val_loader, test_loader = get_dataloaders(batch_size=batch_size)
+    print("DataLoaderit ladattu")
 
-        # Mallin lataus tai koulutus
-        model = UNet()
+    # Random Search hyperparametrien optimointiin
+    num_trials = 2
+    print("Suoritetaan Random Search hyperparametrien optimoimiseksi...")
 
-        # Check if the model file exists
-        if os.path.exists(model_path):
-            print("Malli löytyy tiedostosta, ladataan se...")
-            model.load_state_dict(torch.load(model_path))
-            train_losses, val_losses = None, None
-        else:
-            print("Malli ei löytynyt tiedostosta, aloitetaan koulutus...")
+    for trial in range(num_trials):
+        # Arvotaan hyperparametrit satunnaisesti
+        params = {
+            'batch_size': random.choice(param_space['batch_size']),
+            'learning_rate': random.choice(param_space['learning_rate']),
+            'dropout_rate': random.choice(param_space['dropout_rate']),
+            'optimizer_type': random.choice(param_space['optimizer_type']),
+            'num_epochs': random.choice(param_space['num_epochs'])
+        }
 
-            # Delete existing loss plot file if retraining
-            if os.path.exists(loss_plot_file):
-                os.remove(loss_plot_file)
+        # Luo mallin uudelleen jokaisessa kokeilussa
+        model = UNet(dropout_rate=params['dropout_rate'])
+        output_dir = os.path.join(base_output_dir, f"trial_{trial + 1}")
+        os.makedirs(output_dir, exist_ok=True)
 
-            train_losses, val_losses = train_model(model, train_loader, val_loader, num_epochs=num_epochs,
-                                                   learning_rate=learning_rate)
-            torch.save(model.state_dict(), model_path)
-            print("Koulutus suoritettu ja malli tallennettu")
+        print(f"\nTrial {trial + 1}/{num_trials} - Hyperparametrit: {params}")
 
-    except Exception as e:
-        print(f"Virhe suorituksen aikana: {e}")
+        # Koulutetaan malli nykyisillä parametreilla
+        train_losses, val_losses = train_model(
+            model, train_loader, val_loader,
+            optimizer_type=params['optimizer_type'],
+            learning_rate=params['learning_rate'],
+            num_epochs=params['num_epochs'],
+            dropout_rate=params['dropout_rate'],
+            early_stopping_patience=5
+        )
 
-    loss_plot_path = None
+        # Tallenna koulutettu malli kokeilukansioon
+        model_path = os.path.join(output_dir, 'unet_model.pth')
+        torch.save(model.state_dict(), model_path)
 
-    if os.path.exists(loss_plot_file):
-        loss_plot_path = os.path.abspath(loss_plot_file)
-    else:
-        if train_losses is not None and val_losses is not None:
+        # Häviön kuvaajan luonti
+        if train_losses and val_losses:
             plt.figure()
             plt.plot(train_losses, label='Train Loss')
             plt.plot(val_losses, label='Validation Loss')
@@ -58,108 +74,76 @@ if __name__ == "__main__":
             plt.xlabel('Epoch')
             plt.ylabel('Loss')
             plt.legend()
-            loss_plot_path = os.path.join(output_dir, loss_plot_file)
+            loss_plot_path = os.path.join(output_dir, 'loss_progression.png')
             plt.savefig(loss_plot_path)
-            plt.show()
+            plt.close()
         else:
             loss_plot_path = "Ei koulutustietoa saatavilla"
 
-    mIoU, mPA = compute_metrics(model, test_loader)
+        # Mallin suorituskyvyn arviointi
+        mIoU, mPA = compute_metrics(model, test_loader)
+        print(f"Trial {trial + 1} - mIoU: {mIoU}, mPA: {mPA}")
 
-    def arvioi_miou(mIoU):
-        if mIoU > 0.85:
-            return (
-                f"Mean Intersection over Union (mIoU) on erinomainen ({mIoU:.4f}), mikä osoittaa, että malli suoriutuu erittäin hyvin "
-                "maksakuvien segmentoinnista ja pystyy erottamaan maksakudoksen tarkasti taustasta ja muista kudoksista."
-            )
-        elif 0.75 <= mIoU <= 0.85:
-            return (
-                f"Mean Intersection over Union (mIoU) on hyvä ({mIoU:.4f}), mikä osoittaa, että malli suoriutuu segmentoinnista "
-                "luotettavasti. Vaikka tarkkuus on korkea, pieniä parannuksia voi olla tarpeen joillakin alueilla."
-            )
-        elif 0.5 <= mIoU < 0.75:
-            return (
-                f"Mean Intersection over Union (mIoU) on hyväksyttävä ({mIoU:.4f}), mikä viittaa siihen, että malli suoriutuu segmentoinnista "
-                "tyydyttävästi, mutta tarkkuuden parantaminen on suositeltavaa tehokkaan kliinisen sovelluksen varmistamiseksi."
-            )
-        else:
-            return (
-                f"Mean Intersection over Union (mIoU) on matala ({mIoU:.4f}), mikä osoittaa, että mallin segmentointitarkkuus on riittämätön "
-                "ja vaatii huomattavia parannuksia."
-            )
+        # Luo raportti HTML-muodossa
+        report_path = os.path.join(output_dir, 'arviointiraportti.html')
+        with open(report_path, 'w') as f:
+            f.write("<html><head><title>Arviointiraportti</title></head><body>")
+            f.write(f"<h1>Trial {trial + 1} - Mallin arviointi testijoukolla</h1>")
+            f.write(f"<p>Keskimääräinen IoU: {mIoU:.4f}</p>")
+            f.write(f"<p>Keskimääräinen pikselitarkkuus (mPA): {mPA:.4f}</p>")
 
-    def arvioi_mpa(mPA):
-        if mPA > 0.9:
-            return (
-                f"Mean Pixel Accuracy (mPA) on erittäin korkea ({mPA:.4f}), mikä tarkoittaa, että malli osaa luokitella pikselit erittäin tarkasti "
-                "maksakuvissa, mikä tekee siitä hyvin soveltuvan kliinisiin sovelluksiin."
-            )
-        elif 0.85 <= mPA <= 0.9:
-            return (
-                f"Mean Pixel Accuracy (mPA) on korkea ({mPA:.4f}), mikä osoittaa, että malli pystyy luotettavasti luokittelemaan suurimman osan pikseleistä "
-                "oikein. Pieniä parannuksia voi harkita joidenkin alueiden tarkkuuden nostamiseksi."
-            )
-        elif 0.7 <= mPA < 0.85:
-            return (
-                f"Mean Pixel Accuracy (mPA) on hyväksyttävä ({mPA:.4f}), mikä tarkoittaa, että malli suoriutuu segmentoinnista pikselitasolla tyydyttävästi, "
-                "mutta tarkkuutta olisi hyvä parantaa laadun varmistamiseksi."
-            )
-        else:
-            return (
-                f"Mean Pixel Accuracy (mPA) on matala ({mPA:.4f}), mikä viittaa siihen, että malli ei onnistu luotettavasti pikselien oikeassa luokittelussa, "
-                "ja sen käyttö kliinisissä sovelluksissa on rajoitettua."
-            )
+            f.write("<h2>Hyperparametrit:</h2>")
+            f.write("<ul>")
+            f.write(f"<li>Koulutuskierrokset (Epochs): {params['num_epochs']}</li>")
+            f.write(f"<li>Oppimisnopeus (Learning Rate): {params['learning_rate']}</li>")
+            f.write(f"<li>Eräkoko (Batch Size): {params['batch_size']}</li>")
+            f.write(f"<li>Dropout Rate: {params['dropout_rate']}</li>")
+            f.write(f"<li>Optimointialgoritmi (Optimizer): {params['optimizer_type']}</li>")
+            f.write("</ul>")
 
-    report_path = os.path.join(output_dir, 'arviointiraportti.html')
-    with open(report_path, 'w') as f:
-        # Kirjoita HTML:n alkuosa
-        f.write("<html><head><title>Arviointiraportti</title></head><body>")
-        f.write("<h1>Mallin arviointi testijoukolla</h1>")
-        f.write(f"<p>Keskimääräinen IoU: {mIoU:.4f}</p>")
-        f.write(f"<p>Keskimääräinen pikselitarkkuus (mPA): {mPA:.4f}</p>")
-        f.write("<h2>Analyysi:</h2>")
-        f.write(f"<p>{arvioi_miou(mIoU)}</p>")
-        f.write(f"<p>{arvioi_mpa(mPA)}</p>")
-        f.write(f"<p>Koulutuskierrokset: {num_epochs}, Oppimisnopeus: {learning_rate}, Eräkoko: {batch_size}</p>")
-        f.write("<h2>Luodut kuvaajat ja kuvat:</h2>")
+            f.write("<h2>Kuvat:</h2>")
 
-        if os.path.exists(loss_plot_path):
-            f.write("<h3>Häviön kehityskaavio:</h3>")
-            f.write(f"<img src='{loss_plot_path}' width='800'><br>")
-        else:
-            f.write("<p>Häviön kehityskaavio: Ei koulutustietoa saatavilla</p>")
+            if os.path.exists(loss_plot_path):
+                f.write("<h3>Häviön kehityskaavio:</h3>")
+                f.write(f"<img src='{os.path.basename(loss_plot_path)}' width='800'><br>")
+            else:
+                f.write("<p>Häviön kehityskaavio: Ei koulutustietoa saatavilla</p>")
 
-        test_images_dir = 'Liver_Medical_Image_Datasets/test/images'
-        test_image_files = sorted(os.listdir(test_images_dir))
+            test_images_dir = 'Liver_Medical_Image_Datasets/test/images'
+            test_image_files = sorted(os.listdir(test_images_dir))[:3]
 
-        test_images = test_image_files[:3]
-        for img_name in test_images:
-            image_path = os.path.join(test_images_dir, img_name)
-            image, label, output_np = segment_single_image(model, image_path, transform)
+            for img_name in test_image_files:
+                image_path = os.path.join(test_images_dir, img_name)
+                image, label, output_np = segment_single_image(model, image_path, transform)
 
-            fig, axs = plt.subplots(1, 3, figsize=(12, 4))
-            axs[0].imshow(image)
-            axs[0].set_title('Alkuperäinen kuva')
-            axs[1].imshow(label, cmap='gray')
-            axs[1].set_title('Todellinen segmentoitu kuva')
-            axs[2].imshow(output_np, cmap='gray')
-            axs[2].set_title('Ennustettu segmentointi')
+                fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+                axs[0].imshow(image)
+                axs[0].set_title('Alkuperäinen kuva')
+                axs[1].imshow(label, cmap='gray')
+                axs[1].set_title('Todellinen segmentoitu kuva')
+                axs[2].imshow(output_np, cmap='gray')
+                axs[2].set_title('Ennustettu segmentointi')
 
-            for ax in axs:
-                ax.axis('off')
-            plt.tight_layout()
+                for ax in axs:
+                    ax.axis('off')
+                plt.tight_layout()
 
-            base_name = os.path.splitext(os.path.basename(image_path))[0]
-            output_image_path = os.path.abspath(os.path.join(output_dir, f'segmentation_result_{base_name}.png'))
-            plt.savefig(output_image_path)
-            plt.close(fig)
+                base_name = os.path.splitext(os.path.basename(image_path))[0]
+                output_image_path = os.path.join(output_dir, f'segmentation_result_{base_name}.png')
+                plt.savefig(output_image_path)
+                plt.close(fig)
 
-            thumbnail_path = os.path.abspath(os.path.join(output_dir, f'segmentation_result_{base_name}_thumbnail.png'))
-            image_obj = Image.open(output_image_path)
-            image_obj.thumbnail((800, 800))
-            image_obj.save(thumbnail_path)
+                thumbnail_path = os.path.join(output_dir, f'segmentation_result_{base_name}_thumbnail.png')
+                image_obj = Image.open(output_image_path)
+                image_obj.thumbnail((800, 800))
+                image_obj.save(thumbnail_path)
 
-            f.write(f"<h3>Segmentointikuva: {base_name}</h3>")
-            f.write(f"<a href='{output_image_path}' target='_blank'><img src='{thumbnail_path}' width='800'></a><br>")
+                # Käytä suhteellisia polkuja HTML:ssä
+                output_image_rel_path = os.path.basename(output_image_path)
+                thumbnail_rel_path = os.path.basename(thumbnail_path)
 
-        f.write("</body></html>")
+                f.write(f"<h3>Segmentointikuva: {base_name}</h3>")
+                f.write(
+                    f"<a href='{output_image_rel_path}' target='_blank'><img src='{thumbnail_rel_path}' width='800'></a><br>")
+
+            f.write("</body></html>")

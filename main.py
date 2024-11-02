@@ -59,9 +59,9 @@ if __name__ == "__main__":
         # Plot the loss progression
         if train_losses and val_losses:
             plt.figure()
-            plt.plot(train_losses, label='Harjoitushäviö')
-            plt.plot(val_losses, label='Validointihäviö')
-            plt.title('Häviön kehitys')
+            plt.plot(train_losses, label='Harjoitushäviö (Training Loss)')
+            plt.plot(val_losses, label='Validointihäviö (Validation Loss)')
+            plt.title('Häviön kehitys (Loss Progression)')
             plt.xlabel('Koulutuskierrokset (Epochs)')
             plt.ylabel('Häviö (Loss)')
             plt.legend()

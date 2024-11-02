@@ -115,6 +115,7 @@ def train_model(model, train_loader, val_loader, optimizer_type, learning_rate, 
     for epoch in range(num_epochs):
         model.train()
         train_loss = 0.0
+        print(f"\nEpoch {epoch + 1}/{num_epochs}")
 
         for batch_idx, (images, masks) in enumerate(train_loader):
             images, masks = images.to(device), masks.to(device)

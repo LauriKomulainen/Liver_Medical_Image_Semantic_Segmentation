@@ -1,41 +1,33 @@
 import os
 import random
-
 import torch
 from PIL import Image
-
 from data_handler import get_dataloaders, transform
 from model import UNet, train_model, compute_metrics, segment_single_image, random_search
-
 import matplotlib.pyplot as plt
 from datetime import datetime
 
 if __name__ == "__main__":
     result_dir = "model reports"
-    batch_size = 4
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     base_output_dir = os.path.join(result_dir, timestamp)
     os.makedirs(base_output_dir, exist_ok=True)
 
-    # Määritä hyperparametrihakuväli Random Searchia varten
     param_space = {
-        'batch_size': [4], #, 8, 16
-        'learning_rate': [1e-3], #, 1e-4, 1e-5
-        'dropout_rate': [0.1, 0.2, 0.3],
-        'optimizer_type': ['Adam'], #, 'SGD'
-        'num_epochs': [1]  # 10, 20, 30
+        'batch_size': [4, 8, 16],
+        'learning_rate': [1e-3, 1e-4, 1e-5],
+        'dropout_rate': [0.1, 0.2, 0.3, 0.4, 0,5],
+        'optimizer_type': ['Adam', 'SGD'],
+        'num_epochs': [5, 10, 15, 20, 30]
     }
 
-    # Ladataan data
-    train_loader, val_loader, test_loader = get_dataloaders(batch_size=batch_size)
-    print("DataLoaderit ladattu")
+    train_loader, val_loader, test_loader = get_dataloaders(batch_size=4)
+    print("Data ladattu")
 
-    # Random Search hyperparametrien optimointiin
     num_trials = 2
-    print("Suoritetaan Random Search hyperparametrien optimoimiseksi...")
+    print("Suoritetaan satunnainen hyperparametrien valinta...")
 
     for trial in range(num_trials):
-        # Arvotaan hyperparametrit satunnaisesti
         params = {
             'batch_size': random.choice(param_space['batch_size']),
             'learning_rate': random.choice(param_space['learning_rate']),
@@ -44,14 +36,12 @@ if __name__ == "__main__":
             'num_epochs': random.choice(param_space['num_epochs'])
         }
 
-        # Luo mallin uudelleen jokaisessa kokeilussa
         model = UNet(dropout_rate=params['dropout_rate'])
-        output_dir = os.path.join(base_output_dir, f"trial_{trial + 1}")
+        output_dir = os.path.join(base_output_dir, f"kierros_{trial + 1}")
         os.makedirs(output_dir, exist_ok=True)
 
-        print(f"\nTrial {trial + 1}/{num_trials} - Hyperparametrit: {params}")
+        print(f"\nKierros (Epoch): {trial + 1}/{num_trials} - Hyperparametrit: {params}")
 
-        # Koulutetaan malli nykyisillä parametreilla
         train_losses, val_losses = train_model(
             model, train_loader, val_loader,
             optimizer_type=params['optimizer_type'],
@@ -68,29 +58,30 @@ if __name__ == "__main__":
         # Häviön kuvaajan luonti
         if train_losses and val_losses:
             plt.figure()
-            plt.plot(train_losses, label='Train Loss')
-            plt.plot(val_losses, label='Validation Loss')
-            plt.title('Loss Progression')
-            plt.xlabel('Epoch')
-            plt.ylabel('Loss')
+            plt.plot(train_losses, label='Harjoitushäviö')
+            plt.plot(val_losses, label='Validointihäviö')
+            plt.title('Häviön kehitys')
+            plt.xlabel('Kierrokset (Epochs)')
+            plt.ylabel('Häviö (Loss)')
             plt.legend()
             loss_plot_path = os.path.join(output_dir, 'loss_progression.png')
             plt.savefig(loss_plot_path)
             plt.close()
         else:
-            loss_plot_path = "Ei koulutustietoa saatavilla"
+            loss_plot_path = "Ei häviötietoja saatavilla"
 
         # Mallin suorituskyvyn arviointi
         mIoU, mPA = compute_metrics(model, test_loader)
-        print(f"Trial {trial + 1} - mIoU: {mIoU}, mPA: {mPA}")
+        print(f"Kierros {trial + 1} - mIoU: {mIoU}, mPA: {mPA}")
 
         # Luo raportti HTML-muodossa
         report_path = os.path.join(output_dir, 'arviointiraportti.html')
         with open(report_path, 'w') as f:
             f.write("<html><head><title>Arviointiraportti</title></head><body>")
-            f.write(f"<h1>Trial {trial + 1} - Mallin arviointi testijoukolla</h1>")
-            f.write(f"<p>Keskimääräinen IoU: {mIoU:.4f}</p>")
-            f.write(f"<p>Keskimääräinen pikselitarkkuus (mPA): {mPA:.4f}</p>")
+            f.write(f"<h1>Malli {trial + 1}</h1>")
+            f.write("<h2>mIoU & mPA:</h2>")
+            f.write(f"<p>Mallin mIoU: {mIoU:.4f}</p>")
+            f.write(f"<p>Mallin pikselitarkkuus (mPA): {mPA:.4f}</p>")
 
             f.write("<h2>Hyperparametrit:</h2>")
             f.write("<ul>")
@@ -138,7 +129,6 @@ if __name__ == "__main__":
                 image_obj.thumbnail((800, 800))
                 image_obj.save(thumbnail_path)
 
-                # Käytä suhteellisia polkuja HTML:ssä
                 output_image_rel_path = os.path.basename(output_image_path)
                 thumbnail_rel_path = os.path.basename(thumbnail_path)
 

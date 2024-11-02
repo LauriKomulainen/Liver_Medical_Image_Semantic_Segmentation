@@ -6,14 +6,10 @@ from torchvision import transforms
 from PIL import Image
 
 
-# 2. Datasetin lataus ja esikäsittely
-
-# 2.1 Datasetin jakaminen koulutus-, validointi- ja testijoukkoihin
 def split_dataset(base_dir):
     images_dir = os.path.join(base_dir, 'Images')
     labels_dir = os.path.join(base_dir, 'Labels')
 
-    # Tarkista, onko dataset jo jaettu
     already_split = all(
         os.path.exists(os.path.join(base_dir, split, 'images'))
         and os.path.exists(os.path.join(base_dir, split, 'labels'))
@@ -25,7 +21,6 @@ def split_dataset(base_dir):
         print("Dataset on jo jaettu.")
         return
 
-    # Jos datasettiä ei ole jaettu, jatka jakamista
     image_files = sorted(os.listdir(images_dir))
     random.seed(42)
     random.shuffle(image_files)
@@ -44,17 +39,14 @@ def split_dataset(base_dir):
         os.makedirs(split_labels_dir, exist_ok=True)
 
         for file_name in splits[split]:
-            # Kopioi kuva
             src_image = os.path.join(images_dir, file_name)
             dst_image = os.path.join(split_images_dir, file_name)
             if not os.path.exists(dst_image):
                 shutil.copy(src_image, dst_image)
 
-            # Luo vastaava label-tiedostonimi
             base_name = os.path.splitext(file_name)[0]
             label_file_name = f"{base_name}_mask.png"
 
-            # Kopioi label
             src_label = os.path.join(labels_dir, label_file_name)
             dst_label = os.path.join(split_labels_dir, label_file_name)
             if not os.path.exists(dst_label):
@@ -69,7 +61,6 @@ if __name__ == "__main__":
     split_dataset(base_dir)
 
 
-# 2.2 Datasetin määrittely
 class LiverDataset(Dataset):
     def __init__(self, images_dir, labels_dir, transform=None):
         self.images_dir = images_dir
@@ -95,19 +86,15 @@ class LiverDataset(Dataset):
         if self.transform:
             image = self.transform(image)
             label = self.transform(label)
-            label = (label > 0).float()  # Binaarinen maski
+            label = (label > 0).float()
 
         return image, label
 
-
-# 2.3 Data transformaatiot
 transform = transforms.Compose([
     transforms.Resize((256, 256)),
     transforms.ToTensor()
 ])
 
-
-# 2.4 DataLoaderit
 def get_dataloaders(batch_size=4):
     base_dir = 'Liver_Medical_Image_Datasets'
 

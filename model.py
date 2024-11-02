@@ -10,10 +10,8 @@ class UNet(nn.Module):
     def __init__(self, dropout_rate=0.2):
         super(UNet, self).__init__()
 
-        # Define a dropout layer
         self.dropout = nn.Dropout(dropout_rate)
 
-        # Define basic U-Net blocks with dropout
         def conv_block(in_channels, out_channels):
             block = nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
@@ -26,11 +24,9 @@ class UNet(nn.Module):
             )
             return block
 
-        # Define up-sampling convolution
         def up_conv(in_channels, out_channels):
             return nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
 
-        # Define U-Net layers
         self.conv1 = conv_block(3, 64)
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
 
@@ -102,14 +98,13 @@ def train_model(model, train_loader, val_loader, optimizer_type, learning_rate, 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
 
-    # Tappiofunktio ja optimisaattori
     criterion = nn.BCEWithLogitsLoss()
     if optimizer_type == 'Adam':
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     elif optimizer_type == 'SGD':
         optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
     else:
-        raise ValueError(f"Unsupported optimizer type: {optimizer_type}")
+        raise ValueError(f"Opmointi tyyppiä ei tueta: {optimizer_type}. Valitse joko Adam tai SGD.")
 
     train_losses = []
     val_losses = []
@@ -120,7 +115,6 @@ def train_model(model, train_loader, val_loader, optimizer_type, learning_rate, 
     for epoch in range(num_epochs):
         model.train()
         train_loss = 0.0
-        print(f"\nEpoch {epoch + 1}/{num_epochs}")
 
         for batch_idx, (images, masks) in enumerate(train_loader):
             images, masks = images.to(device), masks.to(device)
@@ -131,13 +125,12 @@ def train_model(model, train_loader, val_loader, optimizer_type, learning_rate, 
             optimizer.step()
             train_loss += loss.item()
 
-            # Logitus jokaisen erän jälkeen
             if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == len(train_loader):
-                print(f"  Erä {batch_idx + 1}/{len(train_loader)}, Loss: {loss.item():.4f}")
+                print(f"Erä {batch_idx + 1}/{len(train_loader)}, Häviö: {loss.item():.4f}")
 
         avg_train_loss = train_loss / len(train_loader)
         train_losses.append(avg_train_loss)
-        print(f"Epoch [{epoch + 1}/{num_epochs}], Keskimääräinen Train Loss: {avg_train_loss:.4f}")
+        print(f"Kierros (Epoch): [{epoch + 1}/{num_epochs}], keskimääräinen harjoitushäviö: {avg_train_loss:.4f}")
 
         # Validointi
         model.eval()
@@ -152,19 +145,19 @@ def train_model(model, train_loader, val_loader, optimizer_type, learning_rate, 
 
         avg_val_loss = val_loss / len(val_loader)
         val_losses.append(avg_val_loss)
-        print(f"Epoch [{epoch + 1}/{num_epochs}], Val Loss: {avg_val_loss:.4f}")
+        print(f"Kierros (Epoch): [{epoch + 1}/{num_epochs}], Validointihäviö: {avg_val_loss:.4f}")
 
         # Early stopping ja mallin tallennus
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             patience_counter = 0
             torch.save(model.state_dict(), 'unet_model.pth')
-            print("  Parannus validointitappiossa, malli tallennettu tiedostoon 'unet_model.pth'.")
+            print("Parannus validointitappiossa, malli tallennettu tiedostoon 'unet_model.pth'.")
         else:
             patience_counter += 1
-            print(f"  Early stopping counter: {patience_counter}/{early_stopping_patience}")
+            print(f"Counter koulutuksen keskeytykseen: {patience_counter}/{early_stopping_patience}")
             if patience_counter >= early_stopping_patience:
-                print("Early stopping triggered.")
+                print("Mallin koulutus keskeytetty, koska validointitappio ei parantunut viiden kierroksen aikana...")
                 break
 
     print("Koulutus valmis.")
@@ -176,7 +169,6 @@ def random_search(train_loader, val_loader, param_space, num_trials):
     best_params = None
 
     for i in range(num_trials):
-        # Arvotaan hyperparametrit satunnaisesti
         batch_size = random.choice(param_space['batch_size'])
         learning_rate = random.choice(param_space['learning_rate'])
         dropout_rate = random.choice(param_space['dropout_rate'])
@@ -203,11 +195,7 @@ def random_search(train_loader, val_loader, param_space, num_trials):
                 'optimizer_type': optimizer_type,
                 'num_epochs': num_epochs
             }
-        print(f"Validaatio Lossi: {val_losses[-1]:.4f}")
-
-    print("\nParhaat hyperparametrit:")
-    print("Best Score:", best_score)
-    print("Best Params:", best_params)
+        print(f"Validaatio häviö: {val_losses[-1]:.4f}")
     return best_params
 
 

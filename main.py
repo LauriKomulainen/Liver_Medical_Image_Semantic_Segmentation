@@ -14,14 +14,14 @@ if __name__ == "__main__":
     os.makedirs(base_output_dir, exist_ok=True)
 
     param_space = {
-        'batch_size': [16], #4, 8, 16
+        'batch_size': [4, 8, 16], #
         'learning_rate': [1e-3, 1e-4, 1e-5],
         'dropout_rate': [0.1, 0.2, 0.3, 0.4, 0.5],
-        'optimizer_type': ['Adam', 'SGD'],
-        'num_epochs': [5]  # 5, 10, 15, 20
+        'optimizer_type': ['Adam',], #'SGD'
+        'num_epochs': [10, 15, 20, 25]  #
     }
 
-    num_trials = 2
+    num_trials = 10
     print("Valitaan satunnaiset hyperparametrit")
 
     for trial in range(num_trials):
@@ -49,7 +49,7 @@ if __name__ == "__main__":
             optimizer_type=params['optimizer_type'],
             learning_rate=params['learning_rate'],
             num_epochs=params['num_epochs'],
-            early_stopping_patience=5
+            early_stopping_patience=3
         )
 
         # Save the trained model

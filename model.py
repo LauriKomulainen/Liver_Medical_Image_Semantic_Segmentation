@@ -152,12 +152,12 @@ def train_model(model, train_loader, val_loader, optimizer_type, learning_rate, 
             best_val_loss = avg_val_loss
             patience_counter = 0
             torch.save(model.state_dict(), 'unet_model.pth')
-            print("Validaatiohäviö parantunut, tallennetaan malli 'unet_model.pth'.")
+            print("Validaatiohäviö on pienempi kuin edellisellä kierroksell, tallennetaan malli....")
         else:
             patience_counter += 1
-            print(f"Laskin mallin aikaiseen lopetukseen: {patience_counter}/{early_stopping_patience}")
+            print(f"Validaatiohäviö ei parantunut edellisestä kierroksesta... {patience_counter}/{early_stopping_patience}")
             if patience_counter >= early_stopping_patience:
-                print("Koulutus lopetettu, koska validaatiohäviö ei parantunut viiden kierroksen aikana.")
+                print(f"Koulutus lopetettu, koska validaatiohäviö ei parantunut {early_stopping_patience} kierroksen aikana.")
                 break
 
     print("Koulutus valmis")

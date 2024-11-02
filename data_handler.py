@@ -95,7 +95,7 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-def get_dataloaders(batch_size=4):
+def get_dataloaders(batch_size):
     base_dir = 'Liver_Medical_Image_Datasets'
 
     train_dataset = LiverDataset(

@@ -1,5 +1,4 @@
 import os
-import random
 import torch
 from PIL import Image
 import torch.nn as nn
@@ -7,7 +6,7 @@ import torch.optim as optim
 
 
 class UNet(nn.Module):
-    def __init__(self, dropout_rate=0.2):
+    def __init__(self, dropout_rate):
         super(UNet, self).__init__()
 
         self.dropout = nn.Dropout(dropout_rate)
@@ -93,29 +92,29 @@ class UNet(nn.Module):
         return c10
 
 
-def train_model(model, train_loader, val_loader, optimizer_type, learning_rate, num_epochs, dropout_rate,
-                early_stopping_patience=5):
+def train_model(model, train_loader, val_loader, optimizer_type, learning_rate, num_epochs, early_stopping_patience=5):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
 
     criterion = nn.BCEWithLogitsLoss()
-    if optimizer_type == 'Adam':
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    elif optimizer_type == 'SGD':
-        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
-    else:
-        raise ValueError(f"Opmointi tyyppiä ei tueta: {optimizer_type}. Valitse joko Adam tai SGD.")
+    optimizer = {
+        'Adam': optim.Adam(model.parameters(), lr=learning_rate),
+        'SGD': optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+    }.get(optimizer_type)
+
+    if optimizer is None:
+        raise ValueError(f"Optimointialgoritmia ei tueta: {optimizer_type}")
 
     train_losses = []
     val_losses = []
     best_val_loss = float('inf')
     patience_counter = 0
 
-    print("Koulutus alkaa...")
+    print("Aloitetaan mallin koulutus....")
     for epoch in range(num_epochs):
         model.train()
         train_loss = 0.0
-        print(f"\nEpoch {epoch + 1}/{num_epochs}")
+        print(f"\nKierros {epoch + 1}/{num_epochs}")
 
         for batch_idx, (images, masks) in enumerate(train_loader):
             images, masks = images.to(device), masks.to(device)
@@ -127,18 +126,18 @@ def train_model(model, train_loader, val_loader, optimizer_type, learning_rate, 
             train_loss += loss.item()
 
             if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == len(train_loader):
-                print(f"Erä {batch_idx + 1}/{len(train_loader)}, Häviö: {loss.item():.4f}")
+                print(f"Batch {batch_idx + 1}/{len(train_loader)}, Harjoitushäviö: {loss.item():.4f}")
 
         avg_train_loss = train_loss / len(train_loader)
         train_losses.append(avg_train_loss)
-        print(f"Kierros (Epoch): [{epoch + 1}/{num_epochs}], keskimääräinen harjoitushäviö: {avg_train_loss:.4f}")
+        print(f"Kierros [{epoch + 1}/{num_epochs}], Harjoitushäviön keskiarvo: {avg_train_loss:.4f}")
 
-        # Validointi
+        # Validation
         model.eval()
         val_loss = 0.0
 
         with torch.no_grad():
-            for batch_idx, (images, masks) in enumerate(val_loader):
+            for images, masks in val_loader:
                 images, masks = images.to(device), masks.to(device)
                 outputs = model(images)
                 loss = criterion(outputs, masks)
@@ -146,58 +145,23 @@ def train_model(model, train_loader, val_loader, optimizer_type, learning_rate, 
 
         avg_val_loss = val_loss / len(val_loader)
         val_losses.append(avg_val_loss)
-        print(f"Kierros (Epoch): [{epoch + 1}/{num_epochs}], Validointihäviö: {avg_val_loss:.4f}")
+        print(f"Kierros [{epoch + 1}/{num_epochs}], Validaatiohäviön keskiarvo: {avg_val_loss:.4f}")
 
-        # Early stopping ja mallin tallennus
+        # Early stopping
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             patience_counter = 0
             torch.save(model.state_dict(), 'unet_model.pth')
-            print("Parannus validointitappiossa, malli tallennettu tiedostoon 'unet_model.pth'.")
+            print("Validaatiohäviö parantunut, tallennetaan malli 'unet_model.pth'.")
         else:
             patience_counter += 1
-            print(f"Counter koulutuksen keskeytykseen: {patience_counter}/{early_stopping_patience}")
+            print(f"Laskin mallin aikaiseen lopetukseen: {patience_counter}/{early_stopping_patience}")
             if patience_counter >= early_stopping_patience:
-                print("Mallin koulutus keskeytetty, koska validointitappio ei parantunut viiden kierroksen aikana...")
+                print("Koulutus lopetettu, koska validaatiohäviö ei parantunut viiden kierroksen aikana.")
                 break
 
-    print("Koulutus valmis.")
+    print("Koulutus valmis")
     return train_losses, val_losses
-
-
-def random_search(train_loader, val_loader, param_space, num_trials):
-    best_score = float('inf')
-    best_params = None
-
-    for i in range(num_trials):
-        batch_size = random.choice(param_space['batch_size'])
-        learning_rate = random.choice(param_space['learning_rate'])
-        dropout_rate = random.choice(param_space['dropout_rate'])
-        optimizer_type = random.choice(param_space['optimizer_type'])
-        num_epochs = random.choice(param_space['num_epochs'])
-
-        # Luo mallin uudelleen jokaisessa kokeilussa
-        model = UNet(dropout_rate=dropout_rate)
-
-        print(f"\nRandom Search Trial {i + 1}/{num_trials}")
-        print(
-            f"Hyperparametrit: Batch size={batch_size}, Learning rate={learning_rate}, Dropout rate={dropout_rate}, Optimizer={optimizer_type}, Epochs={num_epochs}")
-
-        # Koulutetaan malli nykyisillä parametreilla
-        train_losses, val_losses = train_model(model, train_loader, val_loader, optimizer_type, learning_rate, num_epochs, dropout_rate)
-
-        # Vertaa viimeisintä validaatiohäviötä parhaaseen pisteeseen
-        if val_losses[-1] < best_score:
-            best_score = val_losses[-1]
-            best_params = {
-                'batch_size': batch_size,
-                'learning_rate': learning_rate,
-                'dropout_rate': dropout_rate,
-                'optimizer_type': optimizer_type,
-                'num_epochs': num_epochs
-            }
-        print(f"Validaatio häviö: {val_losses[-1]:.4f}")
-    return best_params
 
 
 def segment_single_image(model, image_path, transform):

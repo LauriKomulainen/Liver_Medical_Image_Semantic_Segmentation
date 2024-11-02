@@ -3,29 +3,26 @@ import random
 import torch
 from PIL import Image
 from data_handler import get_dataloaders, transform
-from model import UNet, train_model, compute_metrics, segment_single_image, random_search
+from model import UNet, train_model, compute_metrics, segment_single_image
 import matplotlib.pyplot as plt
 from datetime import datetime
 
 if __name__ == "__main__":
-    result_dir = "model reports"
+    result_dir = "model_reports"
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     base_output_dir = os.path.join(result_dir, timestamp)
     os.makedirs(base_output_dir, exist_ok=True)
 
     param_space = {
-        'batch_size': [4, 8, 16],
+        'batch_size': [16], #4, 8, 16
         'learning_rate': [1e-3, 1e-4, 1e-5],
-        'dropout_rate': [0.1, 0.2, 0.3, 0.4, 0,5],
+        'dropout_rate': [0.1, 0.2, 0.3, 0.4, 0.5],
         'optimizer_type': ['Adam', 'SGD'],
-        'num_epochs': [5, 10, 15, 20, 30]
+        'num_epochs': [5]  # 5, 10, 15, 20
     }
 
-    train_loader, val_loader, test_loader = get_dataloaders(batch_size=4)
-    print("Data ladattu")
-
     num_trials = 2
-    print("Suoritetaan satunnainen hyperparametrien valinta...")
+    print("Valitaan satunnaiset hyperparametrit")
 
     for trial in range(num_trials):
         params = {
@@ -36,32 +33,36 @@ if __name__ == "__main__":
             'num_epochs': random.choice(param_space['num_epochs'])
         }
 
+        train_loader, val_loader, test_loader = get_dataloaders(batch_size=params['batch_size'])
+        print(f"Data ladattu batch koolla: {params['batch_size']}.")
+
         model = UNet(dropout_rate=params['dropout_rate'])
-        output_dir = os.path.join(base_output_dir, f"kierros_{trial + 1}")
+        output_dir = os.path.join(base_output_dir, f"malli_{trial + 1}")
         os.makedirs(output_dir, exist_ok=True)
 
-        print(f"\nTrial: {trial + 1}/{num_trials} - Hyperparametrit: {params}")
+        print(f"\nMalli {trial + 1}/{num_trials} - Hyperparametrit: {params}")
 
         train_losses, val_losses = train_model(
-            model, train_loader, val_loader,
+            model,
+            train_loader,
+            val_loader,
             optimizer_type=params['optimizer_type'],
             learning_rate=params['learning_rate'],
             num_epochs=params['num_epochs'],
-            dropout_rate=params['dropout_rate'],
             early_stopping_patience=5
         )
 
-        # Tallenna koulutettu malli kokeilukansioon
+        # Save the trained model
         model_path = os.path.join(output_dir, 'unet_model.pth')
         torch.save(model.state_dict(), model_path)
 
-        # Häviön kuvaajan luonti
+        # Plot the loss progression
         if train_losses and val_losses:
             plt.figure()
             plt.plot(train_losses, label='Harjoitushäviö')
             plt.plot(val_losses, label='Validointihäviö')
             plt.title('Häviön kehitys')
-            plt.xlabel('Kierrokset (Epochs)')
+            plt.xlabel('Koulutuskierrokset (Epochs)')
             plt.ylabel('Häviö (Loss)')
             plt.legend()
             loss_plot_path = os.path.join(output_dir, 'loss_progression.png')
@@ -70,9 +71,10 @@ if __name__ == "__main__":
         else:
             loss_plot_path = "Ei häviötietoja saatavilla"
 
-        # Mallin suorituskyvyn arviointi
+        # Evaluate model performance
         mIoU, mPA = compute_metrics(model, test_loader)
-        print(f"Kierros {trial + 1} - mIoU: {mIoU}, mPA: {mPA}")
+        print(f"Mallin suorituskyky - mIoU: {mIoU:.4f}, mPA: {mPA:.4f}")
+        print(f"Malli {trial + 1} - mIoU: {mIoU}, mPA: {mPA}")
 
         # Luo raportti HTML-muodossa
         report_path = os.path.join(output_dir, 'arviointiraportti.html')
@@ -128,14 +130,14 @@ if __name__ == "__main__":
 
             f.write(f"<h1>Malli {trial + 1}</h1>")
             f.write("<div class='section'><h2>Mallin mIoU & mPA:</h2>")
-            f.write(f"<p><strong>mIoU:</strong> {mIoU:.4f}</p>")
-            f.write(f"<p><strong>mPA:</strong> {mPA:.4f}</p></div>")
+            f.write(f"<p><strong>mIoU (Mean Intersection over Union):</strong> {mIoU:.4f}</p>")
+            f.write(f"<p><strong>mPA (Mean Pixel Accuracy):</strong> {mPA:.4f}</p></div>")
 
             f.write("<div class='section' id='parameters'><h2>Hyperparametrit:</h2><ul>")
             f.write(f"<li><strong>Koulutuskierrokset (Epochs):</strong> {params['num_epochs']}</li>")
             f.write(f"<li><strong>Oppimisnopeus (Learning Rate):</strong> {params['learning_rate']}</li>")
             f.write(f"<li><strong>Eräkoko (Batch Size):</strong> {params['batch_size']}</li>")
-            f.write(f"<li><strong>Dropout Rate:</strong> {params['dropout_rate']}</li>")
+            f.write(f"<li><strong>Poisjättöprosentti (Dropout Rate)</strong> {params['dropout_rate']}</li>")
             f.write(f"<li><strong>Optimointialgoritmi (Optimizer):</strong> {params['optimizer_type']}</li>")
             f.write("</ul></div>")
 

@@ -132,7 +132,6 @@ def train_model(model, train_loader, val_loader, optimizer_type, learning_rate, 
         train_losses.append(avg_train_loss)
         print(f"Kierros [{epoch + 1}/{num_epochs}], Harjoitushäviön keskiarvo: {avg_train_loss:.4f}")
 
-        # Validation
         model.eval()
         val_loss = 0.0
 
@@ -152,7 +151,7 @@ def train_model(model, train_loader, val_loader, optimizer_type, learning_rate, 
             best_val_loss = avg_val_loss
             patience_counter = 0
             torch.save(model.state_dict(), 'unet_model.pth')
-            print("Validaatiohäviö on pienempi kuin edellisellä kierroksell, tallennetaan malli....")
+            print("Validaatiohäviö on pienempi kuin edellisellä kierroksella, tallennetaan malli....")
         else:
             patience_counter += 1
             print(f"Validaatiohäviö ei parantunut edellisestä kierroksesta... {patience_counter}/{early_stopping_patience}")
@@ -179,7 +178,6 @@ def segment_single_image(model, image_path, transform):
 
     output_np = output.cpu().squeeze().numpy()
 
-    # Ladataan ground truth
     base_name = os.path.splitext(os.path.basename(image_path))[0]
     label_name = f"{base_name}_mask.png"
     label_path = os.path.join(os.path.dirname(image_path).replace('images', 'labels'), label_name)

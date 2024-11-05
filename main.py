@@ -14,11 +14,11 @@ if __name__ == "__main__":
     os.makedirs(base_output_dir, exist_ok=True)
 
     param_space = {
-        'batch_size': [4, 8, 16], #
-        'learning_rate': [1e-3, 1e-4, 1e-5],
-        'dropout_rate': [0.1, 0.2, 0.3, 0.4, 0.5],
-        'optimizer_type': ['Adam',], #'SGD'
-        'num_epochs': [10, 15, 20, 25]  #
+        'batch_size': [4, 8, 16], #4, 8, 16
+        'learning_rate': [1e-3, 1e-4, 1e-5], #1e-3, 1e-4, 1e-5
+        'dropout_rate': [0.1, 0.2, 0.3, 0.4, 0.5], #0.1, 0.2, 0.3, 0.4, 0.5
+        'optimizer_type': ['Adam','SGD'], #'Adam','SGD'
+        'num_epochs': [10, 15, 20, 25]  #10, 15, 20, 25
     }
 
     num_trials = 10

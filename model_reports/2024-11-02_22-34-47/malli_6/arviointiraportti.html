@@ -1,0 +1,48 @@
+
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Arviointiraportti</title>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                    }
+                    h1, h2, h3 {
+                        color: #333;
+                    }
+                    .container {
+                        max-width: 1000px;
+                        margin: auto;
+                    }
+                    .section {
+                        margin-bottom: 20px;
+                    }
+                    .images-container {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 20px;
+                        justify-content: space-between;
+                    }
+                    .image-group {
+                        text-align: center;
+                        width: 32%;
+                    }
+                    .image-group img {
+                        width: 100%;
+                        height: auto;
+                    }
+                    .loss-chart {
+                        margin-bottom: 20px;
+                    }
+                    .loss-chart img {
+                        max-width: 600px;
+                        height: auto;
+                    }
+                    li {
+                        padding-top: 5px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+            <h1>Malli 6</h1><div class='section'><h2>Mallin mIoU & mPA:</h2><p><strong>mIoU (Mean Intersection over Union):</strong> 0.5915</p><p><strong>mPA (Mean Pixel Accuracy):</strong> 0.9460</p></div><div class='section' id='parameters'><h2>Hyperparametrit:</h2><ul><li><strong>Koulutuskierrokset (Epochs):</strong> 20</li><li><strong>Oppimisnopeus (Learning Rate):</strong> 0.0001</li><li><strong>Eräkoko (Batch Size):</strong> 8</li><li><strong>Poisjättöprosentti (Dropout Rate)</strong> 0.4</li><li><strong>Optimointialgoritmi (Optimizer):</strong> Adam</li></ul></div><div class='section'><h2>Kuvat:</h2><div class='loss-chart'><img src='loss_progression.png' alt='Loss Progression Chart'></div><div class='images-container'><div class='image-group'><h3>Segmentointikuva: 012</h3><a href='segmentation_result_012.png' target='_blank'><img src='segmentation_result_012_thumbnail.png'></a></div><div class='image-group'><h3>Segmentointikuva: 015</h3><a href='segmentation_result_015.png' target='_blank'><img src='segmentation_result_015_thumbnail.png'></a></div><div class='image-group'><h3>Segmentointikuva: 016</h3><a href='segmentation_result_016.png' target='_blank'><img src='segmentation_result_016_thumbnail.png'></a></div></div></div></div></body></html>
